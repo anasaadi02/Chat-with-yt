@@ -1,17 +1,20 @@
-# YouTube Video Script Extractor
+# YouTube Video Script Extractor & Chat System
 
-A Python application that extracts the complete script (transcript), title, and description from YouTube videos.
+A Python application that extracts the complete script (transcript), title, and description from YouTube videos, and provides an AI-powered chatbot to ask questions about the video content using local LLM (Ollama).
 
 ## Features
 
 - ✅ Extract video title, author, length, and view count
 - ✅ Extract video description
 - ✅ Extract complete video transcript/script
-- ✅ **NEW:** Audio transcription using OpenAI Whisper (works even when YouTube transcripts aren't available)
+- ✅ **Audio transcription** using OpenAI Whisper (works even when YouTube transcripts aren't available)
 - ✅ Display transcript with timestamps
 - ✅ Save extracted data to a text file
 - ✅ Support for various YouTube URL formats
 - ✅ Multiple transcription methods with automatic fallback
+- ✅ **AI Chatbot** - Ask questions about video content using local LLM (Ollama)
+- ✅ **Semantic Search** - Intelligent chunk retrieval for accurate answers
+- ✅ **Streamlit Web Interface** - Beautiful, interactive web app for video extraction and chat
 
 ## Requirements
 
