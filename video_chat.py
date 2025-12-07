@@ -56,10 +56,52 @@ class VideoChat:
         # Convert transcript_segments if available
         segments = video_data.get('transcript_segments', [])
         if segments:
-            self.transcript_segments = segments
+            # Normalize segments to have both 'timestamp' and 'seconds'
+            normalized_segments = []
+            for segment in segments:
+                normalized_seg = segment.copy()
+                
+                # If segment has 'start' (from Whisper) but no 'timestamp', convert it
+                if 'start' in normalized_seg and 'timestamp' not in normalized_seg:
+                    seconds = normalized_seg['start']
+                    normalized_seg['seconds'] = seconds
+                    normalized_seg['timestamp'] = self._seconds_to_timestamp(seconds)
+                # If segment has 'timestamp' but no 'seconds', convert it
+                elif 'timestamp' in normalized_seg and 'seconds' not in normalized_seg:
+                    timestamp = normalized_seg['timestamp']
+                    normalized_seg['seconds'] = self._timestamp_to_seconds(timestamp)
+                # If segment has 'seconds' but no 'timestamp', convert it
+                elif 'seconds' in normalized_seg and 'timestamp' not in normalized_seg:
+                    seconds = normalized_seg['seconds']
+                    normalized_seg['timestamp'] = self._seconds_to_timestamp(seconds)
+                
+                normalized_segments.append(normalized_seg)
+            
+            self.transcript_segments = normalized_segments
         else:
             # If no segments, create empty list
             self.transcript_segments = []
+    
+    def _seconds_to_timestamp(self, seconds: float) -> str:
+        """Convert seconds to HH:MM:SS or MM:SS format."""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        else:
+            return f"{minutes:02d}:{secs:02d}"
+    
+    def _timestamp_to_seconds(self, timestamp: str) -> float:
+        """Convert timestamp string to seconds."""
+        time_parts = timestamp.split(':')
+        if len(time_parts) == 3:
+            return int(time_parts[0]) * 3600 + int(time_parts[1]) * 60 + int(time_parts[2])
+        elif len(time_parts) == 2:
+            return int(time_parts[0]) * 60 + int(time_parts[1])
+        else:
+            return 0.0
     
     def _load_video_data(self):
         """Load and parse the output.txt file to extract metadata and transcript."""
@@ -145,7 +187,6 @@ class VideoChat:
             i += chunk_size - overlap
         
         self.chunks = chunks
-        print(f"   - Created {len(chunks)} transcript chunks")
     
     def _find_timestamp_for_position(self, word_position: int) -> str:
         """Find approximate timestamp for a word position in the transcript."""
@@ -155,13 +196,30 @@ class VideoChat:
         # Count words up to the position
         word_count = 0
         for segment in self.transcript_segments:
-            segment_words = len(segment['text'].split())
+            segment_words = len(segment.get('text', '').split())
             if word_count + segment_words >= word_position:
-                return segment['timestamp']
+                # Get timestamp, converting from seconds if needed
+                if 'timestamp' in segment:
+                    return segment['timestamp']
+                elif 'seconds' in segment:
+                    return self._seconds_to_timestamp(segment['seconds'])
+                elif 'start' in segment:
+                    return self._seconds_to_timestamp(segment['start'])
+                else:
+                    return "00:00"
             word_count += segment_words
         
         # Return last timestamp if position is beyond transcript
-        return self.transcript_segments[-1]['timestamp'] if self.transcript_segments else "00:00"
+        if self.transcript_segments:
+            last_seg = self.transcript_segments[-1]
+            if 'timestamp' in last_seg:
+                return last_seg['timestamp']
+            elif 'seconds' in last_seg:
+                return self._seconds_to_timestamp(last_seg['seconds'])
+            elif 'start' in last_seg:
+                return self._seconds_to_timestamp(last_seg['start'])
+        
+        return "00:00"
     
     def _generate_embeddings(self):
         """Generate embeddings for all transcript chunks."""
@@ -169,9 +227,7 @@ class VideoChat:
             return
         
         chunk_texts = [chunk['text'] for chunk in self.chunks]
-        print("   - Generating embeddings for semantic search...")
-        self.chunk_embeddings = self.embedding_model.encode(chunk_texts, show_progress_bar=True)
-        print("   - Embeddings generated!")
+        self.chunk_embeddings = self.embedding_model.encode(chunk_texts, show_progress_bar=False)
     
     def is_general_question(self, question: str) -> bool:
         """
@@ -272,7 +328,6 @@ class VideoChat:
         # Build context based on question type
         if is_general:
             # For general questions: use metadata + multiple diverse chunks
-            print(f"📋 Detected general question - using metadata + diverse chunks")
             
             # Get diverse chunks (from beginning, middle, end, and relevant ones)
             diverse_chunks = []
@@ -301,7 +356,6 @@ Relevant transcript segments:
 """
         else:
             # For specific questions: use semantic search to find relevant chunks
-            print(f"🔍 Detected specific question - using semantic search")
             
             relevant_chunks = self._retrieve_relevant_chunks(question, top_k=5)
             
@@ -325,7 +379,6 @@ Answer the question based on the video information and transcript segments provi
 """
         
         # Query Ollama
-        print(f"🤖 Querying Ollama model: {self.model_name}...")
         try:
             # Check if model is available
             try:
